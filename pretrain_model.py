@@ -57,6 +57,8 @@ def train(net, train_loader, criterion, optimizer):
 
 def infer(net, test_loader, criterion):
     net.eval()
+    top1 = utils.AverageMeter()
+    top5 = utils.AverageMeter()
     loss_avg = utils.AverageMeter()
     with torch.no_grad():
         for data, target in test_loader:
@@ -66,7 +68,10 @@ def infer(net, test_loader, criterion):
             logits = net(data)
             loss = criterion(logits, target)
             loss_avg.update(loss.item(), n)
-    return loss_avg.avg
+            prec1, prec5 = utils.accuracy(logits, target, (1,5))
+            top1.update(prec1.item(), n)
+            top5.update(prec5.item(), n)
+    return loss_avg.avg, top1.avg, top5.avg
 
 
 def main(model_name, dataset_name):
@@ -117,8 +122,9 @@ def main(model_name, dataset_name):
         lr = scheduler.get_last_lr()[0]
         logging.info('Epoch {}, lr {}'.format(e, lr))
         train_loss = train(model, trainloader, criterion, optimizer)
-        test_loss = infer(model, testloader, criterion)
+        test_loss, top1_acc, top5_acc = infer(model, testloader, criterion)
         logging.info('train loss {}, test loss {}'.format(train_loss, test_loss))
+        logging.info('test accuracy: @1: {}, @5: {}'.format(top1_acc, top5_acc))
         scheduler.step()
 
         ckpt = {

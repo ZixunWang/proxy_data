@@ -27,6 +27,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
 
 
 def train(net, train_loader, criterion, optimizer):
+    scaler = torch.cuda.amp.GradScaler()
     net.train()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
@@ -36,10 +37,13 @@ def train(net, train_loader, criterion, optimizer):
         target = target.cuda()
 
         optimizer.zero_grad()
-        out, logits = net(data)
-        loss = criterion(logits, target)
-        loss.backward()
-        optimizer.step()
+        with torch.cuda.amp.autocast():
+            out, logits = net(data)
+            loss = criterion(logits, target)
+        scaler.scale(loss).backward()
+
+        scaler.step(optimizer)
+        scaler.update()
         prec1, prec5 = utils.accuracy(logits, target, (1, 5))
         top1.update(prec1.item(), n)
         top5.update(prec5.item(), n)
@@ -47,6 +51,7 @@ def train(net, train_loader, criterion, optimizer):
 
 
 def infer(net, test_loader):
+    scaler = torch.cuda.amp.GradScaler()
     net.eval()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
@@ -55,8 +60,10 @@ def infer(net, test_loader):
             n = data.size(0)
             data = data.cuda()
             target = target.cuda()
+
+            with torch.cuda.amp.autocast():
+                out, logits = net(data)
             
-            out, logits = net(data)
             prec1, prec5 = utils.accuracy(logits, target, (1, 5))
             top1.update(prec1.item(), n)
             top5.update(prec5.item(), n)
@@ -71,12 +78,20 @@ def main(cfg_file):
 
     train_data, test_data, xshape, class_num = get_dataset(cfg.dataset, cfg.root)
 
+    train_indices = np.arange(len(train_data))
     if logger.data_sample_file.exists():
         indices = logger.load_file('data sample')
     else:
-        train_indices = np.arange(len(train_data))
         if cfg.sampler == 'random':
-            indices = random_sampler(train_indices, cfg.ratio, sampler=False)
+            # indices = random_sampler(train_indices, cfg.ratio, sampler=False)
+            if cfg.ratio == 0.125:
+                indices = np.load('./result/ImageNet16-120_125random_sample.npy')
+            elif cfg.ratio == 0.25:  # fix
+                indices = np.load('./result/ImageNet16-120_25random_sample.npy')
+            elif cfg.ratio == 0.5:
+                indices = np.load('./result/ImageNet16-120_50random_sample.npy')
+            elif cfg.ratio == 1:
+                indices = np.load('./result/ImageNet16-120_100random_sample.npy')
         elif cfg.sampler == 'low entropy':
             indices = low_entropy_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'high entropy':
@@ -89,8 +104,12 @@ def main(cfg_file):
             indices = influence_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'pseudo influence':
             indices = pseudo_influence_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
-        elif cfg.sampler == 'skeleton':
-            indices = skeleton_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
+        elif cfg.sampler == 'low L2':
+            indices = low_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
+        elif cfg.sampler == 'high L2':
+            indices = high_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
+        elif cfg.sampler == 'dynamic random':
+            indices = random_sampler(train_indices, cfg.ratio, sampler=False)
         else:
             raise NotImplementedError  # todo: other selected method
         logger.save_file('data sample', indices)
@@ -140,7 +159,8 @@ def main(cfg_file):
         for t in range(cfg.train['average_times']):
             net = get_net_201(cfg.dataset, 'tss', cell, bench_api)
             net = net.cuda()
-            net = nn.DataParallel(net)
+            if torch.cuda.device_count() > 1:
+                net = nn.DataParallel(net)
             criterion = nn.CrossEntropyLoss().cuda()
             optimizer = torch.optim.SGD(
                 net.parameters(),
@@ -153,6 +173,16 @@ def main(cfg_file):
                 T_max=epoch,
                 eta_min=cfg.train['eta_min']
             )
+
+            if cfg.sampler == 'dynamic random':
+                sampler = random_sampler(train_indices, cfg.ratio)
+                dataloader = DataLoader(
+                    train_data,
+                    sampler=sampler,
+                    batch_size=cfg.train['batch_size'],
+                    num_workers=2,
+                    pin_memory=True
+                )
 
             logger.log(f'{i} iter, cell - {cell}, {t}th calc:')
             cur_score = []

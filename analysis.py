@@ -75,6 +75,39 @@ def plot_ImageNet_skeleton(model='resnet18'):
     skeleton = load_prepared_result('ImageNet16-120', model, 'skeleton')
     cmap = plt.get_cmap('Paired')
 
+    categ = np.random.choice(range(120), 5, replace=False)
+    for label, color in zip(categ, cmap.colors):
+        data = [x[0] for x in skeleton[label]]
+        x = [t[0] for t in data]
+        y = [t[1] for t in data]
+        indices = np.random.choice(range(len(x)), 300, replace=False)
+        # indices = list(range(len(x)))
+        plt.scatter(np.array(x)[indices], np.array(y)[indices], color=color, s=1)
+    plt.savefig('./result/test_ske.png')
+    plt.close()
+
+
+def plot_ImageNet_skeleton_hist(model='resnet18'):
+    skeleton = load_prepared_result('ImageNet16-120', model, 'skeleton')
+ 
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    num = 5
+    categ = np.random.choice(range(120), num, replace=False)
+    ylabels = [f'categ{i}' for i in range(num)]
+    for i, label in enumerate(categ):
+        data = [x[0] for x in skeleton[label]]
+        center = np.mean(data, axis=0)
+        dis = [np.log10(np.sqrt((x - center)**2)) for x in data]
+        hist, bins = np.histogram(dis, bins=20)
+        ax.bar(bins[:-1], hist, width=0.1, zs=i, zdir='y', alpha=0.7)
+
+    ax.set_yticks([i+1 for i in range(len(ylabels))])
+    ax.set_yticklabels(ylabels)
+    plt.savefig(f'./result/plot/ImageNet16-120_{model}_L2_hist.png')
+    plt.close()
+
 
 def plot_corr(A, B, title='correlation graph'):
     assert len(A) == len(B)

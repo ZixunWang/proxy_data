@@ -165,21 +165,36 @@ def pseudo_influence_sampler(dataset, net, indices, ratio=0.2, sampler=True):
     return sampler
 
 
-def skeleton_sampler(dataset, net, indices, ratio=0.2, sampler=True):
+def high_L2_sampler(dataset, net, indices, ratio=0.2, sampler=True):
     skeleton = load_prepared_result(dataset, net, 'skeleton')
     num_sample = int(len(indices) * ratio)
     sample = []
     num_class = len(skeleton.keys())
 
-    center = {}
     for key in skeleton.keys():
-        center[key] = np.mean(np.vstack([x[0] for x in skeleton[key]]))
-    
-    offset = 100
-    for key in skeleton.keys():
-        dis = [(x[0] - center[key], x[1]) for x in skeleton[key]]
+        center = np.mean([x[0] for x in skeleton[key]], axis=0)
+        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
         dis.sort(reverse=True)
-        sample.extend([x[1] for x in dis[offset: num_sample//num_class+offset]])
+        sample.extend([x[1] for x in dis[:num_sample//num_class]])
+    
+    if not sampler:
+        return sample
+    sampler = SubsetRandomSampler(sample)
+    return sampler
+
+
+def low_L2_sampler(dataset, net, indices, ratio=0.2, sampler=True):
+    skeleton = load_prepared_result(dataset, net, 'skeleton')
+    num_sample = int(len(indices) * ratio)
+    sample = []
+    num_class = len(skeleton.keys())
+
+    for key in skeleton.keys():
+        center = np.mean([x[0] for x in skeleton[key]], axis=0)
+        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
+        dis.sort()
+        sample.extend([x[1] for x in dis[:num_sample//num_class]])
+    
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
@@ -394,14 +409,14 @@ def get_sample_results():
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: pseudo influence has already calculated')
 
-            '''if dataset[0]=='I':
+            if dataset[0]=='I':
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: getting skeleton...')
                 skeleton = _cal_skeleton(trainset, net)
                 results[dataset][net_name]['skeleton'] = skeleton
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: done')
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: skeleton has already calculated')
-            '''
+            
 
             if 'forgetting' not in results[dataset][net_name]:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: getting forgetting events...')

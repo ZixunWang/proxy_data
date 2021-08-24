@@ -1,13 +1,11 @@
 arun_log/
 */arun_log
 log/
-result/
 __pycache__/
 */__pycache__/
 checkpoints/
 model/state_dicts/
 
 *.pth
-*.npy
 *.png
 *.jpg
