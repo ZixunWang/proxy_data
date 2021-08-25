@@ -1,4 +1,5 @@
 .idea/
+model/state_dicts/
 
 *.pth
 *.png
