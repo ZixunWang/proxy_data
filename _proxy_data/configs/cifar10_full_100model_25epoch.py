@@ -1,0 +1,27 @@
+bench = '201'
+
+dataset = 'cifar10'
+root = None
+
+sampler = 'random'
+ratio = 1.0  # full data
+net_name = None  # pretrained model to cal entropy
+
+resume = './result/cifar10_full_200epoch_val_dict.pth'
+scores_total = f'./result/201_{dataset}_tss_test-accuracy_200epoch.npy'
+model_info = {
+    'pre_selected': None,
+    'num': 10,
+}
+
+train = {
+    'batch_size': 256,
+    'average_times': 3,
+    'learning_rate': 0.1,
+    'momentum': 0.9,
+    'weight_decay': 5e-4,
+    'eta_min': 0.0,
+    'epoch': 200,
+}
+
+
