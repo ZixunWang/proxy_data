@@ -184,21 +184,22 @@ def main(cfg_file):
                 eta_min=cfg.train['eta_min']
             )
 
-            if cfg.sampler == 'dynamic random':
-                sampler = random_sampler(train_indices, cfg.ratio)
-                dataloader = DataLoader(
-                    train_data,
-                    sampler=sampler,
-                    batch_size=cfg.train['batch_size'],
-                    num_workers=2,
-                    pin_memory=True
-                )
+
 
             logger.log(f'{i} iter, cell - {cell}, {t}th calc:')
             cur_score = []
             for e in range(1, epoch+1):
                 lr = scheduler.get_last_lr()[0]
                 logger.log(f'epoch {e}, learning rate {lr}')
+                if cfg.sampler == 'dynamic random':
+                    sampler = random_sampler(train_indices, cfg.ratio)
+                    dataloader = DataLoader(
+                        train_data,
+                        sampler=sampler,
+                        batch_size=cfg.train['batch_size'],
+                        num_workers=2,
+                        pin_memory=True
+                    )
                 train_acc = train(net, dataloader, criterion, optimizer)
                 logger.log(f'top1 train acc: {train_acc}')
                 test_acc = infer(net, testloader)

@@ -194,21 +194,22 @@ def main(cfg_file):
                 eta_min=cfg.train['eta_min']
             )
 
-            if cfg.sampler == 'dynamic random':
-                sampler = random_sampler(train_indices, cfg.ratio)
-                dataloader = DataLoader(
-                    train_data,
-                    sampler=sampler,
-                    batch_size=cfg.train['batch_size'],
-                    num_workers=2,
-                    pin_memory=True
-                )
+
 
             logger.log(f'{i} iter, cell - {cell}, {t}th calc:')
             cur_score = []
             for e in range(1, epoch + 1):
                 lr = scheduler.get_last_lr()[0]
                 logger.log(f'epoch {e}, learning rate {lr}')
+                if cfg.sampler == 'dynamic random':
+                    sampler = random_sampler(train_indices, cfg.ratio)
+                    dataloader = DataLoader(
+                        train_data,
+                        sampler=sampler,
+                        batch_size=cfg.train['batch_size'],
+                        num_workers=2,
+                        pin_memory=True
+                    )
                 train_acc = train(net, dataloader, criterion, optimizer)
                 logger.log(f'top1 train acc: {train_acc}')
                 test_acc = infer(net, testloader)
@@ -249,4 +250,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     main(args.cfg_file)
 
-# CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25random_100epoch_100model.py --start_model_index 50 --end_model_index 75
+'''
+CUDA_VISIBLE_DEVICES=0 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 0 --end_model_index 25
+CUDA_VISIBLE_DEVICES=1 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 25 --end_model_index 50
+CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 50 --end_model_index 75
+CUDA_VISIBLE_DEVICES=3 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 75 --end_model_index 100
+'''
