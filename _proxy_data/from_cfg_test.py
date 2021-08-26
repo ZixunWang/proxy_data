@@ -117,7 +117,7 @@ def main(cfg_file):
         elif cfg.sampler == 'high L2':
             indices = high_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'tail L2':
-            indices = high_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
+            indices = tail_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'dynamic random':
             indices = random_sampler(train_indices, cfg.ratio, sampler=False)
         else:

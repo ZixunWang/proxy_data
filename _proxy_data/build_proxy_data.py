@@ -280,7 +280,7 @@ def tail_L2_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=T
         indices = np.random.choice(total_indices, size=num_proxy_data//num_class, replace=False, p=total_prob)
 
         all_class_indices.extend(indices)
-        print(len(all_class_indices))
+
     if not sampler:
         return all_class_indices
     sampler = SubsetRandomSampler(all_class_indices)

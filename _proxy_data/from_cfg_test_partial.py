@@ -68,6 +68,14 @@ def infer(net, test_loader):
             top5.update(prec5.item(), n)
     return top1.avg
 
+# def load_state_from_file_check_repeat(logger, indices):
+#     state = logger.load_file('state')
+#     scores = []
+#     for i, cell in enumerate(indices):
+#         if cell in state['scores']:
+#             scores.append(state['scores'][cell])
+#             continue
+
 
 def main(cfg_file):
     cfg = utils.cfg_from_file(cfg_file)
@@ -116,7 +124,7 @@ def main(cfg_file):
         elif cfg.sampler == 'high L2':
             indices = high_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'tail L2':
-            indices = high_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
+            indices = tail_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'dynamic random':
             indices = random_sampler(train_indices, cfg.ratio, sampler=False)
         else:
@@ -158,10 +166,13 @@ def main(cfg_file):
     logger.log('fix model indices')
     scores_base = scores_total[indices]
 
+
+
     epoch = cfg.train['epoch']
     for i, cell in enumerate(indices):
-        if cell in state['scores']:
-            scores.append(state['scores'][cell])
+        state = logger.load_file('state') if logger.state_file.exists() else {'scores': {}}
+        scores = state['scores']
+        if (cell in scores) or i<args.start_model_index or i>=args.end_model_index:
             continue
         start = time.time()
         cell_score = []
@@ -207,7 +218,9 @@ def main(cfg_file):
             cell_score.append(cur_score)
 
         logger.log(f'cell time consuming: {time.time() - start} s')
-        scores.append(cell_score)
+        state = logger.load_file('state') if logger.state_file.exists() else {'scores': {}}
+        scores = state['scores']
+        scores[cell] = cell_score
         state['scores'][cell] = cell_score
         logger.save_file('state', state)
 
@@ -231,5 +244,9 @@ def main(cfg_file):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cfg_file', type=str, help='proxy data constrution configs')
+    parser.add_argument('--start_model_index', type=int, default=None, help='only train start_index to end_index models')
+    parser.add_argument('--end_model_index', type=int, default=None, help='only train start_index to end_index models')
     args = parser.parse_args()
     main(args.cfg_file)
+
+# CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25random_100epoch_100model.py --start_model_index 50 --end_model_index 75
