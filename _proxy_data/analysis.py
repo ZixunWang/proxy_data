@@ -4,11 +4,14 @@ import argparse
 import numpy as np
 import pandas as pd
 import torch
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from mpl_toolkits.mplot3d import Axes3D
 
-from build_proxy_data import load_prepared_result, random_sampler, low_entropy_sampler, high_entropy_sampler, tail_entropy_sampler
+from build_proxy_data import load_prepared_result, random_sampler, low_entropy_sampler, high_entropy_sampler, \
+    tail_entropy_sampler, low_L2_sampler, high_L2_sampler, tail_L2_sampler
 from nas_bench.utils import get_score_201, NUM_BENCH_201
 from nats_bench import create
 
@@ -71,11 +74,11 @@ def plot_cifar10_entropy_hist_by_samplers(model='resnet18', ratio=0.5):
     plt.close()
 
 
-def plot_ImageNet_skeleton(model='resnet18'):
+def plot_ImageNet_skeleton(model='resnet50'):
     skeleton = load_prepared_result('ImageNet16-120', model, 'skeleton')
     cmap = plt.get_cmap('Paired')
 
-    categ = np.random.choice(range(120), 5, replace=False)
+    categ = np.random.choice(range(120), 20, replace=False)
     for label, color in zip(categ, cmap.colors):
         data = [x[0] for x in skeleton[label]]
         x = [t[0] for t in data]
@@ -83,6 +86,58 @@ def plot_ImageNet_skeleton(model='resnet18'):
         indices = np.random.choice(range(len(x)), 300, replace=False)
         # indices = list(range(len(x)))
         plt.scatter(np.array(x)[indices], np.array(y)[indices], color=color, s=1)
+    plt.savefig('./result/test_ske.png')
+    plt.close()
+
+
+def plot_ImageNet_tsne_with_entropy(model='resnet50'):
+    tsne = load_prepared_result('ImageNet16-120', model, 'skeleton')
+    entropy = load_prepared_result('ImageNet16-120', model, 'entropy')
+    cmap = plt.get_cmap('Paired')
+
+    dataset = 'ImageNet16-120'
+    sampling_type = 1
+    ratio = 0.25
+
+    # entropy_selected_indices = tail_entropy_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    # entropy_selected_indices = low_entropy_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    # entropy_selected_indices = high_entropy_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    # entropy_selected_indices = low_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    # entropy_selected_indices = high_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    entropy_selected_indices = tail_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+
+
+
+    categ = np.random.choice(range(120), 1, replace=False)
+    categ = [1]
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    for label, color in zip(categ, cmap.colors):
+        data = [x[0] for x in tsne[label]]
+        index = [x[1] for x in tsne[label]]
+
+        x = [t[0] for t in data]
+        y = [t[1] for t in data]
+        z = entropy[index]
+
+        indices = np.random.choice(range(len(x)), min(1000, len(x)), replace=False)  # 1~1300
+
+        selected_indices = []
+        for each in indices:
+            if index[each] in entropy_selected_indices:
+                selected_indices.append(each)
+
+        # print(indices, indeces_intersect)
+        # assert 1==0
+        # indices = list(range(len(x)))
+
+        indices = list(set(indices).difference(set(selected_indices)))
+
+        ax.scatter3D(np.array(x)[indices], np.array(y)[indices], z[indices], color='red', alpha=0.5) # color
+        ax.scatter3D(np.array(x)[selected_indices], np.array(y)[selected_indices], z[selected_indices], color='blue', alpha=0.5)
+
+
+    plt.show()
     plt.savefig('./result/test_ske.png')
     plt.close()
 
@@ -168,4 +223,4 @@ def main():
 
 
 if __name__ == '__main__':
-    eval_bench_12_200()
+    plot_ImageNet_tsne_with_entropy()

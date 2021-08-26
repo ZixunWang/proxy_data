@@ -99,10 +99,12 @@ def tail_entropy_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, samp
     bins = np.arange(low_bin, high_bin+bin_width, bin_width)
 
     def get_bin_idx(ent):
-        for i in range(len(bins)-1):
-            if (bins[i] <= ent) and (ent <= bins[i+1]):
-                return i
-        return None
+        # for i in range(len(bins)-1):
+        #     if (bins[i] <= ent) and (ent <= bins[i+1]):
+        #         return i
+        # return None
+
+        return int((ent - low_bin) / bin_width)
 
     index_histogram = []
     for i in range(len(bins)-1):
@@ -202,6 +204,86 @@ def low_L2_sampler(dataset, net, indices, ratio=0.2, sampler=True):
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
+    return sampler
+
+
+def tail_L2_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=True):
+    skeleton = load_prepared_result(dataset, net, 'skeleton')
+    num_sample = np.sum([len(skeleton[x]) for x in skeleton])
+    # sample = []
+    num_class = len(skeleton.keys())
+
+    def get_bin_idx(l2):
+        return int((l2 - low_bin) / bin_width)
+
+    all_class_indices = []
+
+    for key in skeleton.keys():
+        center = np.mean([x[0] for x in skeleton[key]], axis=0)
+        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
+
+        min_L2, max_L2 = np.min(dis), np.max(dis)
+        if dataset == 'cifar10':
+            bin_width = 0.5
+        elif dataset == 'cifar100':
+            bin_width = 0.25
+        elif dataset.startswith('ImageNet'):
+            bin_width = 0.25
+
+        low_bin = np.round(min_L2)
+        while min_L2 < low_bin:
+            low_bin -= bin_width
+        high_bin = np.round(max_L2)
+        while max_L2 > high_bin:
+            high_bin += bin_width
+        bins = np.arange(low_bin, high_bin + bin_width, bin_width)
+
+        index_histogram = []
+        for i in range(len(bins) - 1):
+            index_histogram.append([])
+
+        for l2, index in dis:
+            bin_idx = get_bin_idx(l2)
+            if bin_idx is None:
+                raise ValueError("[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f" % (
+                low_bin, high_bin, l2))
+            index_histogram[bin_idx].append(index)
+
+        histo = np.array([len(h) for h in index_histogram])
+        if sampling_type == 1:
+            inv_histo = (max(histo) - histo + 1) * (histo != 0)
+            inv_histo_prob = inv_histo / np.sum(inv_histo)
+        elif sampling_type == 2:
+            inv_histo_prob = np.array([1 / (len(bins) - 1) for _ in index_histogram])
+        elif sampling_type == 3:
+            inv_histo_prob = np.array([(1 / len(l) if len(l) != 0 else 0) for l in index_histogram])
+        else:
+            raise ValueError("Error in sampling type for histogram-based sampling")
+
+        if dataset == 'ImageNet16-120':
+            num_proxy_data = int(int(np.floor(ratio * num_sample)) / 120) * 120
+        else:
+            num_proxy_data = int(np.floor(ratio * len(skeleton)))
+
+        # indices = []
+        total_indices = []
+        total_prob = []
+        for index_bin, prob in zip(index_histogram, inv_histo_prob):
+            if len(index_histogram) == 0:
+                assert 1==0
+                continue
+            total_indices += index_bin
+            temp = np.array([prob for _ in range(len(index_bin))])
+            temp = temp / len(index_bin)
+            total_prob += temp.tolist()
+        total_prob = total_prob / np.sum(total_prob)
+        indices = np.random.choice(total_indices, size=num_proxy_data//num_class, replace=False, p=total_prob)
+
+        all_class_indices.extend(indices)
+        print(len(all_class_indices))
+    if not sampler:
+        return all_class_indices
+    sampler = SubsetRandomSampler(all_class_indices)
     return sampler
 
 
@@ -341,7 +423,7 @@ def _cal_skeleton(trainset, net):
     def _hook(module, fea_in, fea_out):
         feas.append(fea_out)
         return fea_out
-    
+
     skeleton = {}
     net.avgpool.register_forward_hook(hook=_hook)
     if torch.cuda.is_available():
@@ -362,6 +444,41 @@ def _cal_skeleton(trainset, net):
         feas.pop()
 
     embedded = TSNE(n_components=2).fit_transform(np.vstack([x[0] for x in res]))
+
+    for _, idx, target in res:
+        skeleton[target].append((embedded[idx], idx))
+
+    return skeleton
+
+
+def _cal_skeleton_dim(trainset, net, dim):
+    from sklearn.manifold import TSNE
+    feas = []
+
+    def _hook(module, fea_in, fea_out):
+        feas.append(fea_out)
+        return fea_out
+
+    skeleton = {}
+    net.avgpool.register_forward_hook(hook=_hook)
+    if torch.cuda.is_available():
+        device = 'cuda:0'
+        net = nn.DataParallel(net.to(device))
+    else:
+        device = 'cpu'
+    net.eval()
+
+    res = []
+    for idx, (data, target) in tqdm(enumerate(trainset)):
+        data = torch.Tensor(data).unsqueeze(0).to(device)
+        _ = net(data)
+        if target not in skeleton:
+            skeleton[target] = []
+        code = feas[-1].detach().cpu().view(1, -1).squeeze().numpy()
+        res.append((code, idx, target))
+        feas.pop()
+
+    embedded = TSNE(n_components=dim).fit_transform(np.vstack([x[0] for x in res]))
 
     for _, idx, target in res:
         skeleton[target].append((embedded[idx], idx))
@@ -476,16 +593,26 @@ def get_sample_results():
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: done')
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: skeleton has already calculated')
-            
 
-            if 'forgetting' not in results[dataset][net_name]:
-                logging.info(f'[dataset: {dataset}, net: {net_name}]: getting forgetting events...')
-                forgetting = _cal_forgetting(trainset, net)
-                results[dataset][net_name]['forgetting'] = forgetting
+
+            if 'skeleton target dim 128' not in results[dataset][net_name]:
+                logging.info(f'[dataset: {dataset}, net: {net_name}]: getting skeleton target dim 128...')
+                skeleton = _cal_skeleton_dim(trainset, net, 128)
+                results[dataset][net_name]['skeleton target dim 128'] = skeleton
                 torch.save(results, record_file)
-                logging.info(f'[dataset: {dataset}, net: {net_name}: done')
+                logging.info(f'[dataset: {dataset}, net: {net_name}]: done')
             else:
-                logging.info(f'[dataset: {dataset}, net: {net_name}]: forgetting events has already calculated')
+                logging.info(f'[dataset: {dataset}, net: {net_name}]: skeleton target dim 128 has already calculated')
+
+
+            # if 'forgetting' not in results[dataset][net_name]:
+            #     logging.info(f'[dataset: {dataset}, net: {net_name}]: getting forgetting events...')
+            #     forgetting = _cal_forgetting(trainset, net)
+            #     results[dataset][net_name]['forgetting'] = forgetting
+            #     torch.save(results, record_file)
+            #     logging.info(f'[dataset: {dataset}, net: {net_name}: done')
+            # else:
+            #     logging.info(f'[dataset: {dataset}, net: {net_name}]: forgetting events has already calculated')
 
     torch.save(results, record_file)
     logging.info(f'sample results have been stored to {os.path.abspath(record_file)} !')

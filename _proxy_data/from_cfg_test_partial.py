@@ -20,10 +20,9 @@ from build_proxy_data import *
 from nats_bench import create
 from nas_bench.utils import get_dataset, get_split, get_net_201, get_rank_201, NUM_BENCH_201
 
-
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-            format=log_format, datefmt='%m/%d %I:%M:%S %p')
+                    format=log_format, datefmt='%m/%d %I:%M:%S %p')
 
 
 def train(net, train_loader, criterion, optimizer):
@@ -63,7 +62,7 @@ def infer(net, test_loader):
 
             with torch.cuda.amp.autocast():
                 out, logits = net(data)
-            
+
             prec1, prec5 = utils.accuracy(logits, target, (1, 5))
             top1.update(prec1.item(), n)
             top5.update(prec5.item(), n)
@@ -140,7 +139,7 @@ def main(cfg_file):
         pin_memory=True,
     )
     bench_api = create(None, 'tss', fast_mode=True, verbose=False)
-    
+
     if logger.state_file.exists():
         state = logger.load_file('state')
         logger.log(f'resume state from {logger.state_file}')
@@ -149,10 +148,10 @@ def main(cfg_file):
 
     scores = []
     scores_total = np.load(cfg.scores_total)
-    
-    #if logger.model_sample_file.exists():
+
+    # if logger.model_sample_file.exists():
     #    indices = logger.load_file('model sample')
-    #else:
+    # else:
     #    indices = np.random.choice(NUM_BENCH_201, cfg.model_num, replace=False)
     #    logger.save_file('model sample', indices)
     indices = np.load('./result/tss_100_sample_model.npy')
@@ -196,7 +195,7 @@ def main(cfg_file):
 
             logger.log(f'{i} iter, cell - {cell}, {t}th calc:')
             cur_score = []
-            for e in range(1, epoch+1):
+            for e in range(1, epoch + 1):
                 lr = scheduler.get_last_lr()[0]
                 logger.log(f'epoch {e}, learning rate {lr}')
                 train_acc = train(net, dataloader, criterion, optimizer)
@@ -207,7 +206,7 @@ def main(cfg_file):
                 scheduler.step()
             cell_score.append(cur_score)
 
-        logger.log(f'cell time consuming: {time.time()-start} s')
+        logger.log(f'cell time consuming: {time.time() - start} s')
         scores.append(cell_score)
         state['scores'][cell] = cell_score
         logger.save_file('state', state)
@@ -216,18 +215,17 @@ def main(cfg_file):
 
     scores = [pd.Series([item[i][-1] for item in scores]) for i in range(cfg.train['average_times'])]
     if cfg.train['average_times'] != 1:
-        plot_1strank_base_acc(*scores, title=title+'self', dir_=logger.log_dir)
-    
+        plot_1strank_base_acc(*scores, title=title + 'self', dir_=logger.log_dir)
+
     scores.insert(0, scores_base)
     pearson, spearman = utils.cal_corr(*scores)
     logger.log(f'\npearson:\n{pearson}\nspearman:\n{spearman}')
-    plot_1strank_base_acc(*scores, title=title+'base', dir_=logger.log_dir)
+    plot_1strank_base_acc(*scores, title=title + 'base', dir_=logger.log_dir)
 
-    top50_indices = np.argsort(scores_base)[len(scores_base)//2:]
+    top50_indices = np.argsort(scores_base)[len(scores_base) // 2:]
     top50_scores = [score[top50_indices] for score in scores]
     pearson, spearman = utils.cal_corr(*top50_scores)
     logger.log(f'\ntop50 person:\n{pearson}\ntop50 spearman:\n{spearman}')
-
 
 
 if __name__ == '__main__':

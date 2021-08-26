@@ -1,0 +1,7 @@
+_proxy_data/nas_bench/tools/XAutoDL/xautodl/config_utils/__pycache__/*
+_proxy_data/nas_bench/tools/XAutoDL/xautodl/datasets/__pycache__/*
+_proxy_data/nas_bench/tools/XAutoDL/xautodl/models/__pycache__/*
+_proxy_data/model/__pycache__/*
+_proxy_data/__pycache__/*
+_proxy_data/nas_bench/__pycache__/*
+_proxy_data/nas_bench/tools/XAutoDL/xautodl/models/cell_infers/__pycache__/*

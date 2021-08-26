@@ -160,7 +160,7 @@ def get_score_201(dataset, search_space='tss', epoch=None, metric='test-accuracy
     score = []
     print(f'getting {metric} on {dataset} from nats bench with total epoch=200')
     for i in tqdm(range(NUM_BENCH_201)):
-        score.append(api.get_more_info(i, dataset, iepoch=iepoch, is_random=False, hp=200)[metric])
+        score.append(api.get_more_info(i, dataset, iepoch=epoch, is_random=False, hp=200)[metric])
     return score
 
 
