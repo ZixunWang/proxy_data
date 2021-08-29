@@ -103,13 +103,13 @@ def plot_ImageNet_tsne_with_entropy(model='resnet50'):
     # entropy_selected_indices = low_entropy_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
     # entropy_selected_indices = high_entropy_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
     # entropy_selected_indices = low_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
-    # entropy_selected_indices = high_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
-    entropy_selected_indices = tail_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    entropy_selected_indices = high_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
+    # entropy_selected_indices = tail_L2_sampler(dataset, model, np.arange(len(entropy)), ratio=ratio, sampler=False)
 
 
 
     categ = np.random.choice(range(120), 1, replace=False)
-    categ = [1]
+    categ = [3]
     fig = plt.figure()
     ax = plt.axes(projection='3d')
     for label, color in zip(categ, cmap.colors):
