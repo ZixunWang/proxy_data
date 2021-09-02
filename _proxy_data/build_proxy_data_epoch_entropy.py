@@ -20,16 +20,16 @@ import utils
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-            format=log_format, datefmt='%m/%d %I:%M:%S %p')
+                    format=log_format, datefmt='%m/%d %I:%M:%S %p')
 
 config = {
-    #'cifar10': {
+    # 'cifar10': {
     #    'resnet18': resnet18,
     #    'resnet34': resnet34,
     #    'resnet50': resnet50,
     #    'vgg11': vgg11_bn,
     #    'vgg19': vgg19_bn,
-    #},
+    # },
     'ImageNet16-120': {
         # 'resnet18': resnet18,
         'resnet50': resnet50,
@@ -38,7 +38,7 @@ config = {
 
 
 def random_sampler(indices, ratio=0.2, sampler=True):
-    sample = np.random.choice(indices, int(len(indices)*ratio), replace=False)
+    sample = np.random.choice(indices, int(len(indices) * ratio), replace=False)
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
@@ -65,7 +65,7 @@ def low_entropy_sampler(dataset, net, indices, ratio=0.2, sampler=True):
 def mid_entropy_sampler(dataset, net, indices, ratio=0.2, sampler=True):
     entropy = load_prepared_result(dataset, net, 'entropy')[indices]
     num_sample = int(len(indices) * ratio)
-    sample = np.argsort(entropy)[len(entropy)//2 - num_sample//2:len(entropy)//2 + num_sample//2]
+    sample = np.argsort(entropy)[len(entropy) // 2 - num_sample // 2:len(entropy) // 2 + num_sample // 2]
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
@@ -82,27 +82,16 @@ def high_entropy_sampler(dataset, net, indices, ratio=0.2, sampler=True):
     return sampler
 
 
-def dynamic_low_entropy_sampler(indices, ratio=0.2, sampler=True, load_epoch=0):
-    record_file = '/home/hehaowei/h0sda/proxy_nas/contrastive/SimCLR_ImageNet16_transform/logits/pretrain_resnet50_ImageNet16_epoch%03d.npy' % load_epoch
-    entropy = np.load(record_file)
-    # entropy = load_prepared_result(dataset, net, 'entropy')[indices]
-
-    num_sample = int(len(indices) * ratio)
-    sample = np.argsort(entropy)[:num_sample]
-    print('in bulid proxy data, sum is ', np.sum(sample))
-    if not sampler:
-        return sample
-    sampler = SubsetRandomSampler(sample)
-    return sampler
-
-
-def dynamic_tail_entropy_sampler(dataset, indices, ratio=0.2, sampler=True, load_epoch=0, sampling_type=1):
-    record_file = '/home/hehaowei/h0sda/proxy_nas/contrastive/SimCLR_ImageNet16_transform/logits/pretrain_resnet50_ImageNet16_epoch%03d.npy' % load_epoch
-    entropy = np.load(record_file)
+def tail_entropy_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=True):
+    '''refer: https://github.com/nabk89/NAS-with-Proxy-data/blob/main/sampler.py'''
+    entropy = load_prepared_result(dataset, net, 'entropy')[indices]
     min_entropy, max_entropy = np.min(entropy), np.max(entropy)
-    if dataset == 'cifar10': bin_width = 0.5
-    elif dataset == 'cifar100': bin_width = 0.25
-    elif dataset.startswith('ImageNet'): bin_width = 0.25
+    if dataset == 'cifar10':
+        bin_width = 0.5
+    elif dataset == 'cifar100':
+        bin_width = 0.25
+    elif dataset.startswith('ImageNet'):
+        bin_width = 0.25
 
     low_bin = np.round(min_entropy)
     while min_entropy < low_bin:
@@ -113,6 +102,11 @@ def dynamic_tail_entropy_sampler(dataset, indices, ratio=0.2, sampler=True, load
     bins = np.arange(low_bin, high_bin + bin_width, bin_width)
 
     def get_bin_idx(ent):
+        # for i in range(len(bins)-1):
+        #     if (bins[i] <= ent) and (ent <= bins[i+1]):
+        #         return i
+        # return None
+
         return int((ent - low_bin) / bin_width)
 
     index_histogram = []
@@ -122,7 +116,8 @@ def dynamic_tail_entropy_sampler(dataset, indices, ratio=0.2, sampler=True, load
     for index, e in enumerate(entropy):
         bin_idx = get_bin_idx(e)
         if bin_idx is None:
-            raise ValueError("[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f"%(low_bin, high_bin, e))
+            raise ValueError("[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f" % (
+            low_bin, high_bin, e))
         index_histogram[bin_idx].append(index)
 
     histo = np.array([len(h) for h in index_histogram])
@@ -130,82 +125,9 @@ def dynamic_tail_entropy_sampler(dataset, indices, ratio=0.2, sampler=True, load
         inv_histo = (max(histo) - histo + 1) * (histo != 0)
         inv_histo_prob = inv_histo / np.sum(inv_histo)
     elif sampling_type == 2:
-        inv_histo_prob = np.array([1/(len(bins)-1) for _ in index_histogram])
+        inv_histo_prob = np.array([1 / (len(bins) - 1) for _ in index_histogram])
     elif sampling_type == 3:
-        inv_histo_prob = np.array([(1/len(l) if len(l) != 0 else 0) for l in index_histogram])
-    else:
-        raise ValueError("Error in sampling type for histogram-based sampling")
-
-    if dataset == 'ImageNet16-120':
-        num_proxy_data = int(int(np.floor(ratio * len(entropy))) / 1000) * 1000
-    else:
-        num_proxy_data = int(np.floor(ratio * len(entropy)))
-
-    indices = []
-    total_indices = []
-    total_prob = []
-    for index_bin, prob in zip(index_histogram, inv_histo_prob):
-        if len(index_histogram) == 0:
-            continue
-        total_indices += index_bin
-        temp = np.array([prob for _ in range(len(index_bin))])
-        temp = temp/len(index_bin)
-        total_prob += temp.tolist()
-    total_prob = total_prob / np.sum(total_prob)
-    indices = np.random.choice(total_indices, size=num_proxy_data, replace=False, p=total_prob)
-
-    num_sample = int(len(indices) * ratio)
-    sample = np.argsort(entropy)[:num_sample]
-    print('in bulid proxy data, sum is ', np.sum(sample))
-    if not sampler:
-        return sample
-    sampler = SubsetRandomSampler(sample)
-    return sampler
-
-
-
-def tail_entropy_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=True):
-    '''refer: https://github.com/nabk89/NAS-with-Proxy-data/blob/main/sampler.py'''
-    entropy = load_prepared_result(dataset, net, 'entropy')[indices]
-    min_entropy, max_entropy = np.min(entropy), np.max(entropy)
-    if dataset == 'cifar10': bin_width = 0.5
-    elif dataset == 'cifar100': bin_width = 0.25
-    elif dataset.startswith('ImageNet'): bin_width = 0.25
-
-    low_bin = np.round(min_entropy)
-    while min_entropy < low_bin:
-        low_bin -= bin_width
-    high_bin = np.round(max_entropy)
-    while max_entropy > high_bin:
-        high_bin += bin_width
-    bins = np.arange(low_bin, high_bin+bin_width, bin_width)
-
-    def get_bin_idx(ent):
-        # for i in range(len(bins)-1):
-        #     if (bins[i] <= ent) and (ent <= bins[i+1]):
-        #         return i
-        # return None
-
-        return int((ent - low_bin) / bin_width)
-
-    index_histogram = []
-    for i in range(len(bins)-1):
-        index_histogram.append([])
-
-    for index, e in enumerate(entropy):
-        bin_idx = get_bin_idx(e)
-        if bin_idx is None:
-            raise ValueError("[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f"%(low_bin, high_bin, e))
-        index_histogram[bin_idx].append(index)
-
-    histo = np.array([len(h) for h in index_histogram])
-    if sampling_type == 1:
-        inv_histo = (max(histo) - histo + 1) * (histo != 0)
-        inv_histo_prob = inv_histo / np.sum(inv_histo)
-    elif sampling_type == 2:
-        inv_histo_prob = np.array([1/(len(bins)-1) for _ in index_histogram])
-    elif sampling_type == 3:
-        inv_histo_prob = np.array([(1/len(l) if len(l) != 0 else 0) for l in index_histogram])
+        inv_histo_prob = np.array([(1 / len(l) if len(l) != 0 else 0) for l in index_histogram])
     else:
         raise ValueError("Error in sampling type for histogram-based sampling")
 
@@ -222,11 +144,11 @@ def tail_entropy_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, samp
             continue
         total_indices += index_bin
         temp = np.array([prob for _ in range(len(index_bin))])
-        temp = temp/len(index_bin)
+        temp = temp / len(index_bin)
         total_prob += temp.tolist()
     total_prob = total_prob / np.sum(total_prob)
     indices = np.random.choice(total_indices, size=num_proxy_data, replace=False, p=total_prob)
-    
+
     if not sampler:
         return indices
     sampler = SubsetRandomSampler(indices)
@@ -261,10 +183,10 @@ def high_L2_sampler(dataset, net, indices, ratio=0.2, sampler=True):
 
     for key in skeleton.keys():
         center = np.mean([x[0] for x in skeleton[key]], axis=0)
-        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
+        dis = [(np.sqrt(((x[0] - center) ** 2).sum()), x[1]) for x in skeleton[key]]
         dis.sort(reverse=True)
-        sample.extend([x[1] for x in dis[:num_sample//num_class]])
-    
+        sample.extend([x[1] for x in dis[:num_sample // num_class]])
+
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
@@ -279,10 +201,10 @@ def low_L2_sampler(dataset, net, indices, ratio=0.2, sampler=True):
 
     for key in skeleton.keys():
         center = np.mean([x[0] for x in skeleton[key]], axis=0)
-        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
+        dis = [(np.sqrt(((x[0] - center) ** 2).sum()), x[1]) for x in skeleton[key]]
         dis.sort()
-        sample.extend([x[1] for x in dis[:num_sample//num_class]])
-    
+        sample.extend([x[1] for x in dis[:num_sample // num_class]])
+
     if not sampler:
         return sample
     sampler = SubsetRandomSampler(sample)
@@ -302,7 +224,7 @@ def tail_L2_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=T
 
     for key in skeleton.keys():
         center = np.mean([x[0] for x in skeleton[key]], axis=0)
-        dis = [(np.sqrt(((x[0] - center)**2).sum()), x[1]) for x in skeleton[key]]
+        dis = [(np.sqrt(((x[0] - center) ** 2).sum()), x[1]) for x in skeleton[key]]
 
         min_L2, max_L2 = np.min(dis), np.max(dis)
         if dataset == 'cifar10':
@@ -327,8 +249,9 @@ def tail_L2_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=T
         for l2, index in dis:
             bin_idx = get_bin_idx(l2)
             if bin_idx is None:
-                raise ValueError("[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f" % (
-                low_bin, high_bin, l2))
+                raise ValueError(
+                    "[Error] histogram bin settings is wrong ... histogram bins: [%f ~ %f], current: %f" % (
+                        low_bin, high_bin, l2))
             index_histogram[bin_idx].append(index)
 
         histo = np.array([len(h) for h in index_histogram])
@@ -352,14 +275,14 @@ def tail_L2_sampler(dataset, net, indices, ratio=0.2, sampling_type=1, sampler=T
         total_prob = []
         for index_bin, prob in zip(index_histogram, inv_histo_prob):
             if len(index_histogram) == 0:
-                assert 1==0
+                assert 1 == 0
                 continue
             total_indices += index_bin
             temp = np.array([prob for _ in range(len(index_bin))])
             temp = temp / len(index_bin)
             total_prob += temp.tolist()
         total_prob = total_prob / np.sum(total_prob)
-        indices = np.random.choice(total_indices, size=num_proxy_data//num_class, replace=False, p=total_prob)
+        indices = np.random.choice(total_indices, size=num_proxy_data // num_class, replace=False, p=total_prob)
 
         all_class_indices.extend(indices)
 
@@ -380,7 +303,6 @@ def forgetting_sampler(dataset, net, indices, ratio=0.2, sampler=True):
 
 
 def _cal_acc(dataset, net, batch=256):
-
     def accuracy(output, target, topk=(1,)):
         with torch.no_grad():
             maxk = max(topk)
@@ -426,7 +348,6 @@ def _cal_acc(dataset, net, batch=256):
 
 
 def _cal_entropy(dataset, net, batch=32):
-
     def _entropy(p):
         '''log2 scale entropy'''
         return np.log2(-np.sum(p * np.log2(p), axis=1))
@@ -573,11 +494,13 @@ def _cal_forgetting(trainset, net):
         def __init__(self, data):
             super(DatasetWarp, self).__init__()
             self.data = data
+
         def __len__(self):
             return len(self.data)
+
         def __getitem__(self, idx):
             return idx, self.data[idx]
-    
+
     if torch.cuda.is_available():
         device = 'cuda:0'
         net = nn.DataParallel(net.to(device))
@@ -616,6 +539,7 @@ def _cal_forgetting(trainset, net):
 
     return forgetting
 
+
 def get_sample_results():
     logging.info('start to get sample results ...')
     record_file = './result/sample_results.pth'
@@ -628,9 +552,11 @@ def get_sample_results():
             results[dataset] = dict()
         nets = config[dataset]
         if os.path.exists('/mnt/sda1/hehaowei/ImageNet16'):
-            trainset, testset, _, class_num = get_dataset(dataset, '/mnt/sda1/hehaowei/ImageNet16', eval_on_train=True)  # cancel aug on train
+            trainset, testset, _, class_num = get_dataset(dataset, '/mnt/sda1/hehaowei/ImageNet16',
+                                                          eval_on_train=True)  # cancel aug on train
         elif os.path.exists('/mnt/lustre/hehaowei/ImageNet16'):
-            trainset, testset, _, class_num = get_dataset(dataset, '/mnt/lustre/hehaowei/ImageNet16', eval_on_train=True)  # cancel aug on train
+            trainset, testset, _, class_num = get_dataset(dataset, '/mnt/lustre/hehaowei/ImageNet16',
+                                                          eval_on_train=True)  # cancel aug on train
         else:
             raise NotImplementedError
         for net_name in nets:
@@ -638,8 +564,6 @@ def get_sample_results():
             if net_name not in results[dataset]:
                 results[dataset][net_name] = dict()
             net = nets[net_name](dataset, pretrained=True, num_classes=class_num)
-
-
 
             if 'entropy' not in results[dataset][net_name]:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: getting entropy...')
@@ -667,7 +591,7 @@ def get_sample_results():
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: pseudo influence has already calculated')
 
-            if dataset[0]=='I':
+            if dataset[0] == 'I':
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: getting skeleton...')
                 skeleton = _cal_skeleton(trainset, net)
                 results[dataset][net_name]['skeleton'] = skeleton
@@ -675,7 +599,6 @@ def get_sample_results():
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: done')
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: skeleton has already calculated')
-
 
             if 'skeleton target dim 128' not in results[dataset][net_name]:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: getting skeleton target dim 128...')
@@ -685,7 +608,6 @@ def get_sample_results():
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: done')
             else:
                 logging.info(f'[dataset: {dataset}, net: {net_name}]: skeleton target dim 128 has already calculated')
-
 
             # if 'forgetting' not in results[dataset][net_name]:
             #     logging.info(f'[dataset: {dataset}, net: {net_name}]: getting forgetting events...')

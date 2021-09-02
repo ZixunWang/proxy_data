@@ -3,7 +3,7 @@ bench = '201'
 dataset = 'ImageNet16-120'
 root = None
 
-sampler = 'tail entropy'
+sampler = 'low entropy'
 ratio = 0.5
 net_name = 'resnet50'  # pretrained model to cal entropy
 
