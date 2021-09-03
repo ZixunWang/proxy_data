@@ -120,6 +120,8 @@ def main(cfg_file):
             indices = tail_L2_sampler(cfg.dataset, cfg.net_name, train_indices, ratio=cfg.ratio, sampler=False)
         elif cfg.sampler == 'dynamic random':
             indices = random_sampler(train_indices, cfg.ratio, sampler=False)
+        elif cfg.sampler == 'dynamic tail entropy':
+            indices = dynamic_tail_entropy_sampler(cfg.dataset, train_indices, cfg.ratio, sampler=False, load_epoch=10)
         else:
             raise NotImplementedError  # todo: other selected method
         logger.save_file('data sample', indices)
