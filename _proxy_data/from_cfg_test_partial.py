@@ -251,8 +251,15 @@ if __name__ == '__main__':
     main(args.cfg_file)
 
 '''
-CUDA_VISIBLE_DEVICES=0 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 0 --end_model_index 25
-CUDA_VISIBLE_DEVICES=1 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 25 --end_model_index 50
-CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 50 --end_model_index 75
-CUDA_VISIBLE_DEVICES=3 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_50dynamicrandom_25epoch_100model.py --start_model_index 75 --end_model_index 100
+CUDA_VISIBLE_DEVICES=0 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_50epoch_100model.py --start_model_index 0 --end_model_index 25 &
+CUDA_VISIBLE_DEVICES=1 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_50epoch_100model.py --start_model_index 25 --end_model_index 50 &
+CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_50epoch_100model.py --start_model_index 50 --end_model_index 75 &
+CUDA_VISIBLE_DEVICES=3 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_50epoch_100model.py --start_model_index 75 --end_model_index 100 &
+
+CUDA_VISIBLE_DEVICES=0 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_25epoch_100model.py --start_model_index 0 --end_model_index 25 &
+CUDA_VISIBLE_DEVICES=1 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_25epoch_100model.py --start_model_index 25 --end_model_index 50 &
+CUDA_VISIBLE_DEVICES=2 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_25epoch_100model.py --start_model_index 50 --end_model_index 75 &
+CUDA_VISIBLE_DEVICES=3 python from_cfg_test_partial.py --cfg_file configs/ImageNet16-120_25tail_25epoch_100model.py --start_model_index 75 --end_model_index 100 &
+
+
 '''

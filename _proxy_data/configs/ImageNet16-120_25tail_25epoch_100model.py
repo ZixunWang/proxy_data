@@ -17,7 +17,7 @@ train = {
     'momentum': 0.9,
     'weight_decay': 5e-4,
     'eta_min': 0.0,
-    'epoch': 50,
+    'epoch': 25,
 }
 
 
